@@ -4,7 +4,9 @@ import { screenResumeWithAI } from '../services/aiService.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+const pdfParseModule = require('pdf-parse');
+// Safely resolve the pdf-parse function whether it's direct or nested under .default
+const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
 
 export const applyJob = async (req, res) => {
   try {
@@ -45,7 +47,7 @@ export const applyJob = async (req, res) => {
     let initialStatus = 'Pending';
 
     try {
-      // Extract text from the PDF buffer in memory (Zero Cloudinary needed!)
+      // Extract text from the PDF buffer in memory
       if (req.file.mimetype === 'application/pdf') {
         const pdfData = await pdfParse(req.file.buffer);
         resumeText = pdfData.text || '';
@@ -71,8 +73,8 @@ export const applyJob = async (req, res) => {
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl: '', // Bypasses file hosting errors
-      resumeText,    // Stored securely inside MongoDB
+      resumeUrl: '',
+      resumeText,
       matchScore,
       aiSummary,
       matchedSkills,
