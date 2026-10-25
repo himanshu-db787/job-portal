@@ -1,6 +1,33 @@
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
+import { v2 as cloudinary } from 'cloudinary';
+import streamifier from 'streamifier';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Helper to upload memory buffer to Cloudinary as a raw file
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    let stream = cloudinary.uploader.upload_stream(
+      { folder: 'job-portal-resumes', resource_type: 'raw' },
+      (error, result) => {
+        if (result) resolve(result);
+        else reject(error);
+      }
+    );
+    streamifier.createReadStream(fileBuffer).pipe(stream);
+  });
+};
 
 export const applyJob = async (req, res) => {
   try {
@@ -20,7 +47,6 @@ export const applyJob = async (req, res) => {
       return res.status(401).json({ message: 'User not authorized' });
     }
 
-    // Resume upload check
     if (!req.file) {
       return res.status(400).json({ message: 'Resume file is required' });
     }
@@ -34,7 +60,7 @@ export const applyJob = async (req, res) => {
       return res.status(400).json({ message: 'You have already applied for this job' });
     }
 
-    let resumeUrl = req.file.path; // Cloudinary secure URL
+    let resumeUrl = '';
     let resumeText = '';
     let matchScore = 0;
     let aiSummary = '';
@@ -42,24 +68,31 @@ export const applyJob = async (req, res) => {
     let missingSkills = [];
     let initialStatus = 'Pending';
 
-    if (req.file.mimetype === 'application/pdf') {
-      try {
-        const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, req.file.path);
+    try {
+      // 1. Upload PDF buffer directly to Cloudinary securely
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      resumeUrl = cloudinaryResult.secure_url;
+
+      // 2. Extract text from buffer for AI screening
+      if (req.file.mimetype === 'application/pdf') {
+        const pdfData = await pdfParse(req.file.buffer);
+        resumeText = pdfData.text || '';
+
+        const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, resumeText);
         
-        resumeText = aiResult.resumeText || '';
-        matchScore = aiResult.matchScore || 0;
-        aiSummary = aiResult.summary || '';
+        matchScore = aiResult.matchScore || aiResult.score || 0;
+        aiSummary = aiResult.summary || aiResult.aiSummary || '';
         matchedSkills = aiResult.matchedSkills || [];
         missingSkills = aiResult.missingSkills || [];
 
         if (matchScore >= 70) {
           initialStatus = 'Shortlisted';
         }
-        
-        console.log('✅ Successfully processed application screening with Groq Llama 3.');
-      } catch (aiErr) {
-        console.error('❌ Failed to run AI resume screening:', aiErr.message);
       }
+      console.log('✅ Successfully processed application screening and Cloudinary upload.');
+    } catch (err) {
+      console.error('❌ Error processing resume upload or AI screening:', err.message);
+      return res.status(500).json({ message: 'Failed to process resume: ' + err.message });
     }
 
     const application = await Application.create({

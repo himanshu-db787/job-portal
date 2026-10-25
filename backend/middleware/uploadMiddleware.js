@@ -1,20 +1,7 @@
 import multer from 'multer';
-import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'job-portal-resumes',
-    resource_type: 'raw',
-  },
-});
+// Store file temporarily in memory buffer to bypass Cloudinary signature plugin bugs
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   if (
@@ -31,5 +18,5 @@ const fileFilter = (req, file, cb) => {
 export const uploadResume = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
