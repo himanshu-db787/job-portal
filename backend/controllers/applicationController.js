@@ -1,26 +1,41 @@
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
+import { v2 as cloudinary } from 'cloudinary';
+import { Readable } from 'stream';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 
-// Bulletproof resolver for pdf-parse across different Node/ESM build environments
+// Robust pdf-parse resolver
 let pdfParse;
 try {
   const mod = require('pdf-parse');
-  if (typeof mod === 'function') {
-    pdfParse = mod;
-  } else if (mod && typeof mod.default === 'function') {
-    pdfParse = mod.default;
-  } else if (mod && typeof mod.pdfParse === 'function') {
-    pdfParse = mod.pdfParse;
-  } else {
-    pdfParse = async (buffer) => ({ text: buffer.toString('utf-8').replace(/[^\w\s@.,-]/gi, ' ') });
-  }
+  pdfParse = typeof mod === 'function' ? mod : (mod.default || mod);
 } catch (e) {
-  pdfParse = async (buffer) => ({ text: buffer.toString('utf-8').replace(/[^\w\s@.,-]/gi, ' ') });
+  pdfParse = async (buffer) => ({ text: buffer.toString('utf-8') });
 }
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Helper to upload memory buffer to Cloudinary via native Node stream
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'job-portal-resumes', resource_type: 'auto' },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+    Readable.from(fileBuffer).pipe(stream);
+  });
+};
 
 export const applyJob = async (req, res) => {
   try {
@@ -53,6 +68,7 @@ export const applyJob = async (req, res) => {
       return res.status(400).json({ message: 'You have already applied for this job' });
     }
 
+    let resumeUrl = '';
     let resumeText = '';
     let matchScore = 0;
     let aiSummary = '';
@@ -60,11 +76,13 @@ export const applyJob = async (req, res) => {
     let missingSkills = [];
     let initialStatus = 'Pending';
 
-    // Convert file buffer to Base64 Data URL so employers can view/download it
-    const resumeUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-
     try {
-      if (req.file.mimetype === 'application/pdf') {
+      // 1. Upload buffer to Cloudinary to get a real HTTP secure URL for the frontend
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      resumeUrl = cloudinaryResult.secure_url;
+
+      // 2. Parse PDF text for AI screening
+      if (req.file.mimetype === 'application/pdf' && typeof pdfParse === 'function') {
         const pdfData = await pdfParse(req.file.buffer);
         resumeText = pdfData.text || '';
       } else {
@@ -73,8 +91,8 @@ export const applyJob = async (req, res) => {
 
       const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, resumeText);
       
-      matchScore = aiResult.matchScore || aiResult.score || 65;
-      aiSummary = aiResult.summary || aiResult.aiSummary || 'Candidate resume successfully screened.';
+      matchScore = aiResult.matchScore || aiResult.score || 0;
+      aiSummary = aiResult.summary || aiResult.aiSummary || '';
       matchedSkills = aiResult.matchedSkills || [];
       missingSkills = aiResult.missingSkills || [];
 
@@ -82,12 +100,10 @@ export const applyJob = async (req, res) => {
         initialStatus = 'Shortlisted';
       }
       
-      console.log('✅ Successfully processed application submission.');
+      console.log('✅ Successfully processed Cloudinary upload and AI screening.');
     } catch (err) {
-      console.error('❌ Warning during AI screening/parsing:', err.message);
-      resumeText = resumeText || "Resume uploaded successfully.";
-      matchScore = 60;
-      aiSummary = "Application submitted with resume attachment.";
+      console.error('❌ Error in resume processing:', err.message);
+      return res.status(500).json({ message: 'Failed to process application: ' + err.message });
     }
 
     const application = await Application.create({
