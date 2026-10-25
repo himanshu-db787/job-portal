@@ -1,7 +1,10 @@
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
-import pdfParse from 'pdf-parse';
+
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 
 export const applyJob = async (req, res) => {
   try {
@@ -40,7 +43,6 @@ export const applyJob = async (req, res) => {
     if (req.file) {
       if (req.file.mimetype === 'application/pdf') {
         try {
-          // Extract text from the memory buffer automatically
           const pdfData = await pdfParse(req.file.buffer);
           resumeText = pdfData.text || '';
 
@@ -66,7 +68,7 @@ export const applyJob = async (req, res) => {
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl: '', // Stored securely as text in MongoDB
+      resumeUrl: '',
       resumeText,
       matchScore,
       aiSummary,
