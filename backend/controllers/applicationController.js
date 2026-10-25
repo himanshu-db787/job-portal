@@ -4,9 +4,8 @@ import { screenResumeWithAI } from '../services/aiService.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-
-// Directly require the core lib to bypass pdf-parse's test-file bug on Render
-const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+const pdfParseModule = require('pdf-parse');
+const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
 
 export const applyJob = async (req, res) => {
   try {
