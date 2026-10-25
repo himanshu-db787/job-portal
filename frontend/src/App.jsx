@@ -75,6 +75,21 @@ export default function App() {
     }
   };
 
+  // NEW: delete a job (backend checks that you own it)
+  const handleDeleteJob = async (jobId) => {
+    try {
+      await axios.delete(`${API_BASE}/jobs/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Job deleted successfully!');
+      fetchJobs();
+      fetchApplications();
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
+      alert(`Failed to delete job: ${errorMsg}`);
+    }
+  };
+
   const handleApply = async (jobId, resumeFile) => {
     const formData = new FormData();
     formData.append('jobId', jobId);
@@ -110,7 +125,7 @@ export default function App() {
     }
   };
 
-  // NEW: downloads the resume PDF on demand (sends the login token, then saves the file)
+  // Downloads the resume PDF on demand (sends the login token, then saves the file)
   const handleDownloadResume = async (appId, applicantName) => {
     try {
       const res = await axios.get(`${API_BASE}/applications/${appId}/resume`, {
@@ -138,7 +153,14 @@ export default function App() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {tab === 'login' && <Login handleAuth={handleAuth} />}
         {tab === 'register' && <Register handleAuth={handleAuth} />}
-        {tab === 'jobs' && <Jobs jobs={jobs} user={user} handleApply={handleApply} />}
+        {tab === 'jobs' && (
+          <Jobs
+            jobs={jobs}
+            user={user}
+            handleApply={handleApply}
+            handleDeleteJob={handleDeleteJob}
+          />
+        )}
         {tab === 'dashboard' && user && (
           <Dashboard 
             user={user} 

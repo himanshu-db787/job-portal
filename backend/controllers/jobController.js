@@ -1,4 +1,5 @@
 import Job from '../models/Job.js';
+import Application from '../models/Application.js'; // NEW: needed to clean up applications of a deleted job
 
 export const getJobs = async (req, res) => {
   try {
@@ -49,10 +50,13 @@ export const deleteJob = async (req, res) => {
 
     const userId = req.user?._id || req.user?.id;
 
-    // FIX: only the employer who posted the job can delete it
+    // Only the employer who posted the job can delete it
     if (job.postedBy.toString() !== userId.toString()) {
       return res.status(403).json({ message: 'Not allowed to delete this job' });
     }
+
+    // NEW: remove applications that belong to this job
+    await Application.deleteMany({ job: req.params.id });
 
     await Job.findByIdAndDelete(req.params.id);
     res.json({ message: 'Job deleted successfully' });
