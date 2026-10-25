@@ -4,8 +4,9 @@ import { screenResumeWithAI } from '../services/aiService.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const pdfParseModule = require('pdf-parse');
-const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
+
+// Directly require the core lib to bypass pdf-parse's test-file bug on Render
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 
 export const applyJob = async (req, res) => {
   try {
@@ -45,7 +46,7 @@ export const applyJob = async (req, res) => {
     let missingSkills = [];
     let initialStatus = 'Pending';
 
-    // Convert file buffer to Base64 Data URL so frontend can view/download it directly
+    // Convert file buffer to Base64 Data URL so employers can download it
     const resumeUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
     try {
@@ -64,19 +65,17 @@ export const applyJob = async (req, res) => {
           initialStatus = 'Shortlisted';
         }
       }
-      console.log('✅ Successfully processed resume text, AI screening, and Base64 storage.');
+      console.log('✅ Successfully extracted PDF text and ran AI screening.');
     } catch (err) {
-      console.error('❌ Error during resume processing or AI screening:', err.message);
-      resumeText = resumeText || "Resume uploaded successfully.";
-      matchScore = 50;
-      aiSummary = "Candidate applied with resume attachment.";
+      console.error('❌ Error processing resume text or AI screening:', err.message);
+      return res.status(500).json({ message: 'Failed to parse resume: ' + err.message });
     }
 
     const application = await Application.create({
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl, // Stored safely as a downloadable Base64 link in MongoDB
+      resumeUrl,
       resumeText,
       matchScore,
       aiSummary,
