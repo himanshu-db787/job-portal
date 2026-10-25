@@ -1,6 +1,7 @@
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
+import pdfParse from 'pdf-parse';
 
 export const applyJob = async (req, res) => {
   try {
@@ -29,7 +30,6 @@ export const applyJob = async (req, res) => {
       return res.status(400).json({ message: 'You have already applied for this job' });
     }
 
-    let resumeUrl = '';
     let resumeText = '';
     let matchScore = 0;
     let aiSummary = '';
@@ -38,13 +38,14 @@ export const applyJob = async (req, res) => {
     let initialStatus = 'Pending';
 
     if (req.file) {
-      resumeUrl = req.file.path;
-
       if (req.file.mimetype === 'application/pdf') {
         try {
-          const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, req.file.path);
+          // Extract text from the memory buffer automatically
+          const pdfData = await pdfParse(req.file.buffer);
+          resumeText = pdfData.text || '';
+
+          const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, resumeText);
           
-          resumeText = aiResult.resumeText || '';
           matchScore = aiResult.matchScore || 0;
           aiSummary = aiResult.summary || '';
           matchedSkills = aiResult.matchedSkills || [];
@@ -54,9 +55,9 @@ export const applyJob = async (req, res) => {
             initialStatus = 'Shortlisted';
           }
           
-          console.log('✅ Successfully processed application screening with Groq Llama 3.');
+          console.log('✅ Successfully processed application screening with AI.');
         } catch (aiErr) {
-          console.error('❌ Failed to run AI resume screening:', aiErr.message);
+          console.error('❌ Failed to run AI resume screening or parse PDF:', aiErr.message);
         }
       }
     }
@@ -65,7 +66,7 @@ export const applyJob = async (req, res) => {
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl,
+      resumeUrl: '', // Stored securely as text in MongoDB
       resumeText,
       matchScore,
       aiSummary,
