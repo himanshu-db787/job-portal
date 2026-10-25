@@ -2,10 +2,6 @@ import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
 
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
-
 export const applyJob = async (req, res) => {
   try {
     const { jobId } = req.body;
@@ -24,6 +20,11 @@ export const applyJob = async (req, res) => {
       return res.status(401).json({ message: 'User not authorized' });
     }
 
+    // Resume upload check
+    if (!req.file) {
+      return res.status(400).json({ message: 'Resume file is required' });
+    }
+
     const existingApplication = await Application.findOne({
       job: jobId,
       applicant: applicantId
@@ -33,6 +34,7 @@ export const applyJob = async (req, res) => {
       return res.status(400).json({ message: 'You have already applied for this job' });
     }
 
+    let resumeUrl = req.file.path; // Cloudinary secure URL
     let resumeText = '';
     let matchScore = 0;
     let aiSummary = '';
@@ -40,27 +42,23 @@ export const applyJob = async (req, res) => {
     let missingSkills = [];
     let initialStatus = 'Pending';
 
-    if (req.file) {
-      if (req.file.mimetype === 'application/pdf') {
-        try {
-          const pdfData = await pdfParse(req.file.buffer);
-          resumeText = pdfData.text || '';
+    if (req.file.mimetype === 'application/pdf') {
+      try {
+        const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, req.file.path);
+        
+        resumeText = aiResult.resumeText || '';
+        matchScore = aiResult.matchScore || 0;
+        aiSummary = aiResult.summary || '';
+        matchedSkills = aiResult.matchedSkills || [];
+        missingSkills = aiResult.missingSkills || [];
 
-          const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, resumeText);
-          
-          matchScore = aiResult.matchScore || 0;
-          aiSummary = aiResult.summary || '';
-          matchedSkills = aiResult.matchedSkills || [];
-          missingSkills = aiResult.missingSkills || [];
-
-          if (matchScore >= 70) {
-            initialStatus = 'Shortlisted';
-          }
-          
-          console.log('✅ Successfully processed application screening with AI.');
-        } catch (aiErr) {
-          console.error('❌ Failed to run AI resume screening or parse PDF:', aiErr.message);
+        if (matchScore >= 70) {
+          initialStatus = 'Shortlisted';
         }
+        
+        console.log('✅ Successfully processed application screening with Groq Llama 3.');
+      } catch (aiErr) {
+        console.error('❌ Failed to run AI resume screening:', aiErr.message);
       }
     }
 
@@ -68,7 +66,7 @@ export const applyJob = async (req, res) => {
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl: '',
+      resumeUrl,
       resumeText,
       matchScore,
       aiSummary,
