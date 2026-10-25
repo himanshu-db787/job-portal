@@ -2,7 +2,7 @@ import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
 import { v2 as cloudinary } from 'cloudinary';
-import streamifier from 'streamifier';
+import { Readable } from 'stream';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
@@ -15,7 +15,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Helper to upload memory buffer to Cloudinary as a raw file
+// Helper to upload memory buffer to Cloudinary using native Node streams
 const uploadToCloudinary = (fileBuffer) => {
   return new Promise((resolve, reject) => {
     let stream = cloudinary.uploader.upload_stream(
@@ -25,7 +25,7 @@ const uploadToCloudinary = (fileBuffer) => {
         else reject(error);
       }
     );
-    streamifier.createReadStream(fileBuffer).pipe(stream);
+    Readable.from(fileBuffer).pipe(stream);
   });
 };
 
