@@ -1,33 +1,10 @@
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
-import { v2 as cloudinary } from 'cloudinary';
-import { Readable } from 'stream';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-// Helper to upload memory buffer to Cloudinary using native Node streams
-const uploadToCloudinary = (fileBuffer) => {
-  return new Promise((resolve, reject) => {
-    let stream = cloudinary.uploader.upload_stream(
-      { folder: 'job-portal-resumes', resource_type: 'raw' },
-      (error, result) => {
-        if (result) resolve(result);
-        else reject(error);
-      }
-    );
-    Readable.from(fileBuffer).pipe(stream);
-  });
-};
 
 export const applyJob = async (req, res) => {
   try {
@@ -60,7 +37,6 @@ export const applyJob = async (req, res) => {
       return res.status(400).json({ message: 'You have already applied for this job' });
     }
 
-    let resumeUrl = '';
     let resumeText = '';
     let matchScore = 0;
     let aiSummary = '';
@@ -69,11 +45,7 @@ export const applyJob = async (req, res) => {
     let initialStatus = 'Pending';
 
     try {
-      // 1. Upload PDF buffer directly to Cloudinary securely
-      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
-      resumeUrl = cloudinaryResult.secure_url;
-
-      // 2. Extract text from buffer for AI screening
+      // Extract text from the PDF buffer in memory (Zero Cloudinary needed!)
       if (req.file.mimetype === 'application/pdf') {
         const pdfData = await pdfParse(req.file.buffer);
         resumeText = pdfData.text || '';
@@ -89,9 +61,9 @@ export const applyJob = async (req, res) => {
           initialStatus = 'Shortlisted';
         }
       }
-      console.log('✅ Successfully processed application screening and Cloudinary upload.');
+      console.log('✅ Successfully processed application screening and text extraction.');
     } catch (err) {
-      console.error('❌ Error processing resume upload or AI screening:', err.message);
+      console.error('❌ Error processing resume text or AI screening:', err.message);
       return res.status(500).json({ message: 'Failed to process resume: ' + err.message });
     }
 
@@ -99,8 +71,8 @@ export const applyJob = async (req, res) => {
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl,
-      resumeText,
+      resumeUrl: '', // Bypasses file hosting errors
+      resumeText,    // Stored securely inside MongoDB
       matchScore,
       aiSummary,
       matchedSkills,

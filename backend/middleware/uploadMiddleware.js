@@ -1,6 +1,6 @@
 import multer from 'multer';
 
-// Store file temporarily in memory buffer to bypass Cloudinary signature plugin bugs
+// Store file temporarily in memory buffer for fast backend text extraction
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
