@@ -110,6 +110,27 @@ export default function App() {
     }
   };
 
+  // NEW: downloads the resume PDF on demand (sends the login token, then saves the file)
+  const handleDownloadResume = async (appId, applicantName) => {
+    try {
+      const res = await axios.get(`${API_BASE}/applications/${appId}/resume`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+
+      const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${applicantName || 'resume'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      alert('Failed to download resume');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
       <Navbar user={user} setTab={setTab} handleLogout={handleLogout} />
@@ -124,6 +145,7 @@ export default function App() {
             applications={applications} 
             handlePostJob={handlePostJob} 
             handleStatusChange={handleStatusChange} 
+            handleDownloadResume={handleDownloadResume}
           />
         )}
       </div>

@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 
-// Get base URL for backend static assets (stripping out the trailing '/api' if present)
-const BACKEND_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/api$/, '');
-
-export default function Dashboard({ user, applications, handlePostJob, handleStatusChange }) {
+export default function Dashboard({ user, applications, handlePostJob, handleStatusChange, handleDownloadResume }) {
   const [jobTitle, setJobTitle] = useState('');
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
   const [salary, setSalary] = useState('');
   const [type, setType] = useState('Full-Time');
   const [description, setDescription] = useState('');
-  const [skills, setSkills] = useState(''); // FIX: new skills field
+  const [skills, setSkills] = useState('');
   
   const [openResumeId, setOpenResumeId] = useState(null);
 
@@ -21,7 +18,7 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
       return;
     }
 
-    // FIX: convert "Python, SQL" into ["Python", "SQL"]
+    // convert "Python, SQL" into ["Python", "SQL"]
     const skillsArray = skills.split(',').map((s) => s.trim()).filter((s) => s !== '');
 
     handlePostJob({ title: jobTitle, company, location, salary, type, description, skillsRequired: skillsArray });
@@ -113,7 +110,6 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
                 </select>
               </div>
 
-              {/* FIX: new skills input */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Required Skills (comma separated)</label>
                 <input
@@ -243,17 +239,13 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
                   <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500">
                     <span>Applied on: {new Date(app.createdAt).toLocaleDateString()}</span>
                     <div className="flex items-center gap-2">
-                      {app.resumeUrl && (
-                        <a
-                          href={app.resumeUrl.startsWith('http') || app.resumeUrl.startsWith('data:') ? app.resumeUrl : `${BACKEND_URL}/${app.resumeUrl}`}
-                          download={`${app.applicant?.name || 'resume'}.pdf`} // FIX: lets Chrome download the base64 PDF
-                          target="_blank"
-                          rel="noreferrer"
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-1.5 px-3 rounded-md transition border border-slate-300 flex items-center gap-1"
-                        >
-                          📄 Download Original PDF
-                        </a>
-                      )}
+                      {/* CHANGED: button instead of link; the PDF is fetched only when clicked */}
+                      <button
+                        onClick={() => handleDownloadResume(app._id, app.applicant?.name)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-1.5 px-3 rounded-md transition border border-slate-300 flex items-center gap-1"
+                      >
+                        📄 Download Original PDF
+                      </button>
 
                       {app.resumeText && (
                         <button

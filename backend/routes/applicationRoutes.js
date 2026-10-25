@@ -3,6 +3,7 @@ import {
   applyJob, 
   getJobSeekerApplications, 
   getEmployerApplications, 
+  downloadResume,
   updateApplicationStatus 
 } from '../controllers/applicationController.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -23,6 +24,7 @@ const handleUpload = (req, res, next) => {
 router.post('/', protect, handleUpload, applyJob);
 router.get('/jobseeker', protect, getJobSeekerApplications);
 router.get('/employer', protect, getEmployerApplications);
+router.get('/:id/resume', protect, downloadResume); // NEW
 router.patch('/:id/status', protect, updateApplicationStatus);
 
 export default router;
