@@ -227,7 +227,7 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
                     <div className="flex items-center gap-2">
                       {app.resumeUrl && (
                         <a
-                          href={`${BACKEND_URL}/${app.resumeUrl}`}
+                          href={app.resumeUrl.startsWith('http') ? app.resumeUrl : `${BACKEND_URL}/${app.resumeUrl}`}
                           target="_blank"
                           rel="noreferrer"
                           className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-1.5 px-3 rounded-md transition border border-slate-300 flex items-center gap-1"
