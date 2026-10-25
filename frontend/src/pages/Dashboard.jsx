@@ -10,6 +10,7 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
   const [salary, setSalary] = useState('');
   const [type, setType] = useState('Full-Time');
   const [description, setDescription] = useState('');
+  const [skills, setSkills] = useState(''); // FIX: new skills field
   
   const [openResumeId, setOpenResumeId] = useState(null);
 
@@ -19,12 +20,17 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
       alert('Please fill out all required fields');
       return;
     }
-    handlePostJob({ title: jobTitle, company, location, salary, type, description });
+
+    // FIX: convert "Python, SQL" into ["Python", "SQL"]
+    const skillsArray = skills.split(',').map((s) => s.trim()).filter((s) => s !== '');
+
+    handlePostJob({ title: jobTitle, company, location, salary, type, description, skillsRequired: skillsArray });
     setJobTitle('');
     setCompany('');
     setLocation('');
     setSalary('');
     setDescription('');
+    setSkills('');
   };
 
   const toggleResumeText = (appId) => {
@@ -105,6 +111,18 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
                   <option value="Contract">Contract</option>
                   <option value="Internship">Internship</option>
                 </select>
+              </div>
+
+              {/* FIX: new skills input */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Required Skills (comma separated)</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  value={skills}
+                  onChange={(e) => setSkills(e.target.value)}
+                  placeholder="e.g. Python, TensorFlow, SQL"
+                />
               </div>
 
               <div>
@@ -227,7 +245,8 @@ export default function Dashboard({ user, applications, handlePostJob, handleSta
                     <div className="flex items-center gap-2">
                       {app.resumeUrl && (
                         <a
-                          href={app.resumeUrl.startsWith('http') ? app.resumeUrl : `${BACKEND_URL}/${app.resumeUrl}`}
+                          href={app.resumeUrl.startsWith('http') || app.resumeUrl.startsWith('data:') ? app.resumeUrl : `${BACKEND_URL}/${app.resumeUrl}`}
+                          download={`${app.applicant?.name || 'resume'}.pdf`} // FIX: lets Chrome download the base64 PDF
                           target="_blank"
                           rel="noreferrer"
                           className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-1.5 px-3 rounded-md transition border border-slate-300 flex items-center gap-1"

@@ -3,15 +3,12 @@ import multer from 'multer';
 // Store file temporarily in memory buffer for fast backend text extraction
 const storage = multer.memoryStorage();
 
+// FIX: PDF only, since DOC/DOCX can't be parsed by this setup
 const fileFilter = (req, file, cb) => {
-  if (
-    file.mimetype === 'application/pdf' ||
-    file.mimetype === 'application/msword' ||
-    file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
+  if (file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
-    cb(new Error('Only PDF, DOC, and DOCX files are allowed'), false);
+    cb(new Error('Only PDF files are allowed'), false);
   }
 };
 

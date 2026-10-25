@@ -1,18 +1,7 @@
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import { screenResumeWithAI } from '../services/aiService.js';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-
-// Robust pdf-parse resolver
-let pdfParse;
-try {
-  const mod = require('pdf-parse');
-  pdfParse = typeof mod === 'function' ? mod : (mod.default || mod);
-} catch (e) {
-  pdfParse = async (buffer) => ({ text: buffer.toString('utf-8') });
-}
+import pdfParse from 'pdf-extraction'; // FIX: same parser aiService used; old require('pdf-parse') failed and fell back to raw text
 
 export const applyJob = async (req, res) => {
   try {
@@ -57,14 +46,13 @@ export const applyJob = async (req, res) => {
 
     try {
       // 2. Extract PDF text in memory
-      if (req.file.mimetype === 'application/pdf' && typeof pdfParse === 'function') {
+      // FIX: only PDFs are parsed; reading binary as utf-8 caused the "endobj" garbage
+      if (req.file.mimetype === 'application/pdf') {
         const pdfData = await pdfParse(req.file.buffer);
         resumeText = pdfData.text || '';
-      } else {
-        resumeText = req.file.buffer.toString('utf-8');
       }
 
-      // 3. Run AI Screening
+      // 3. Run AI Screening (FIX: aiService now receives the extracted text, not a file path)
       const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, resumeText);
       
       matchScore = aiResult.matchScore || aiResult.score || 0;
@@ -76,12 +64,12 @@ export const applyJob = async (req, res) => {
         initialStatus = 'Shortlisted';
       }
       
-      console.log('✅ Successfully processed application submission with Base64 storage.');
+      console.log('✅ Resume processed. Text length:', resumeText.length, 'Score:', matchScore);
     } catch (err) {
       console.error('❌ Error during resume processing:', err.message);
-      resumeText = resumeText || "Resume uploaded successfully.";
-      matchScore = 60;
-      aiSummary = "Candidate applied with resume attachment.";
+      // FIX: no more fake 60% score, so failures are visible
+      matchScore = 0;
+      aiSummary = 'Resume could not be processed automatically. Review the original PDF.';
     }
 
     const application = await Application.create({

@@ -1,15 +1,14 @@
 import OpenAI from 'openai';
-import fs from 'fs';
-import pdfParse from 'pdf-extraction';
 
-export const screenResumeWithAI = async (jobDescription, skillsRequired, filePath) => {
+// FIX: third argument is now resumeText (a string), not a filePath
+export const screenResumeWithAI = async (jobDescription, skillsRequired, resumeText) => {
   try {
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!resumeText || !resumeText.trim()) {
       return {
         resumeText: '',
         matchScore: 0,
         shortlisted: false,
-        summary: 'No resume file provided.',
+        summary: 'No readable text found in resume (it may be a scanned PDF).',
         matchedSkills: [],
         missingSkills: skillsRequired || []
       };
@@ -20,9 +19,7 @@ export const screenResumeWithAI = async (jobDescription, skillsRequired, filePat
       baseURL: 'https://openrouter.ai/api/v1' 
     });
 
-    const dataBuffer = fs.readFileSync(filePath);
-    const parsedPdf = await pdfParse(dataBuffer);
-    const resumeText = parsedPdf.text || '';
+    const limitedText = resumeText.slice(0, 15000); // avoid oversized prompts
 
     const prompt = `
       You are an expert AI Applicant Tracking System (ATS). 
@@ -35,11 +32,12 @@ export const screenResumeWithAI = async (jobDescription, skillsRequired, filePat
       ${JSON.stringify(skillsRequired || [])}
 
       Candidate Resume Text:
-      ${resumeText}
+      ${limitedText}
 
       Instructions:
       1. Evaluate candidate fit based on skills, experience, and project context.
-      2. Return ONLY a valid JSON object matching this exact schema (no markdown formatting, no backticks, no explanatory text):
+      2. If no required skills are listed, infer the key skills from the job description.
+      3. Return ONLY a valid JSON object matching this exact schema (no markdown formatting, no backticks, no explanatory text):
 
       {
         "matchScore": <number between 0 and 100>,
@@ -57,7 +55,11 @@ export const screenResumeWithAI = async (jobDescription, skillsRequired, filePat
     });
 
     const rawText = response.choices[0].message.content.trim();
-    const cleanJson = rawText.replace(/^```json/, '').replace(/```$/, '').trim();
+
+    // FIX: grab the JSON object even if the model adds extra text around it
+    const firstBrace = rawText.indexOf('{');
+    const lastBrace = rawText.lastIndexOf('}');
+    const cleanJson = rawText.slice(firstBrace, lastBrace + 1);
     const aiResult = JSON.parse(cleanJson);
 
     console.log('✅ Successfully screened resume via OpenRouter! Match Score:', aiResult.matchScore);
@@ -68,12 +70,13 @@ export const screenResumeWithAI = async (jobDescription, skillsRequired, filePat
     };
 
   } catch (error) {
-    console.error('❌ CRITICAL OpenRouter ATS Screening Error:', error.message);
+    console.error('❌ OpenRouter ATS Screening Error:', error.message);
+    // FIX: honest fallback instead of a fake 65% score
     return {
-      resumeText: '',
-      matchScore: 65,
+      resumeText,
+      matchScore: 0,
       shortlisted: false,
-      summary: 'Automated AI screening encountered an issue. Review resume manually.',
+      summary: 'Automated AI screening failed. Review resume manually.',
       matchedSkills: [],
       missingSkills: []
     };
