@@ -4,15 +4,8 @@ import { screenResumeWithAI } from '../services/aiService.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-
-// Safely require pdf-parse with fallback handling
-let pdfParse;
-try {
-  const pdfParseModule = require('pdf-parse');
-  pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
-} catch (e) {
-  pdfParse = null;
-}
+const pdfParseModule = require('pdf-parse');
+const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
 
 export const applyJob = async (req, res) => {
   try {
@@ -52,15 +45,13 @@ export const applyJob = async (req, res) => {
     let missingSkills = [];
     let initialStatus = 'Pending';
 
+    // Convert file buffer to Base64 Data URL so frontend can view/download it directly
+    const resumeUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+
     try {
       if (req.file.mimetype === 'application/pdf') {
-        if (typeof pdfParse === 'function') {
-          const pdfData = await pdfParse(req.file.buffer);
-          resumeText = pdfData.text || '';
-        } else {
-          // Safe fallback if module fails to load
-          resumeText = req.file.buffer.toString('utf-8').replace(/[^\w\s@.,-]/gi, ' ');
-        }
+        const pdfData = await pdfParse(req.file.buffer);
+        resumeText = pdfData.text || '';
 
         const aiResult = await screenResumeWithAI(job.description, job.skillsRequired, resumeText);
         
@@ -73,20 +64,19 @@ export const applyJob = async (req, res) => {
           initialStatus = 'Shortlisted';
         }
       }
-      console.log('✅ Successfully processed application screening and text extraction.');
+      console.log('✅ Successfully processed resume text, AI screening, and Base64 storage.');
     } catch (err) {
-      console.error('❌ Warning during resume processing:', err.message);
-      // Graceful fallback so the user's application still goes through successfully
+      console.error('❌ Error during resume processing or AI screening:', err.message);
       resumeText = resumeText || "Resume uploaded successfully.";
-      matchScore = 60;
-      aiSummary = "Candidate applied successfully with resume attachment.";
+      matchScore = 50;
+      aiSummary = "Candidate applied with resume attachment.";
     }
 
     const application = await Application.create({
       job: jobId,
       applicant: applicantId,
       employer: job.postedBy,
-      resumeUrl: '',
+      resumeUrl, // Stored safely as a downloadable Base64 link in MongoDB
       resumeText,
       matchScore,
       aiSummary,
