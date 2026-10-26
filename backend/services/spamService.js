@@ -17,6 +17,7 @@ const getRuleScore = ({ title, description }) => {
   }
 
   const linkCount = (text.match(/https?:\/\/|www\./gi) || []).length;
+
   if (linkCount >= 2) {
     score += 25;
     reasons.push('Multiple links');
@@ -33,6 +34,7 @@ const getRuleScore = ({ title, description }) => {
   }
 
   return { score: Math.min(score, 100), reasons };
+
 };
 
 // Step 2: AI check using the same OpenRouter setup as resume screening
