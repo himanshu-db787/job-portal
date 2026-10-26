@@ -5,10 +5,15 @@ const jobSchema = new mongoose.Schema({
   description: { type: String, required: true },
   company: { type: String, required: true },
   location: { type: String, default: 'Remote' },
-  salary: { type: String, default: 'Negotiable' }, // Changed to String to allow values like "$1000"
-  type: { type: String, default: 'Full-Time' },    // Matched with frontend 'type' key
+  salary: { type: String, default: 'Negotiable' },
+  type: { type: String, default: 'Full-Time' },
   skillsRequired: [String],
-  postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+  postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+
+  // NEW: moderation fields
+  status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Approved' },
+  spamScore: { type: Number, default: 0 },
+  spamReason: { type: String, default: '' }
 }, { timestamps: true });
 
 export default mongoose.model('Job', jobSchema);

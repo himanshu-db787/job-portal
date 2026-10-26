@@ -15,11 +15,22 @@ export default function App() {
   const [tab, setTab] = useState('jobs');
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [myJobs, setMyJobs] = useState([]);           // NEW: employer's own jobs
+  const [pendingJobs, setPendingJobs] = useState([]); // NEW: admin review queue
 
   useEffect(() => {
     fetchJobs();
-    if (token) fetchApplications();
+    if (!token) return;
+
+    if (user?.role === 'admin') {
+      fetchPendingJobs();
+    } else {
+      fetchApplications();
+      if (user?.role === 'employer') fetchMyJobs();
+    }
   }, [token, user]);
+
+  const authHeader = { headers: { Authorization: `Bearer ${token}` } };
 
   const fetchJobs = async () => {
     try {
@@ -33,10 +44,26 @@ export default function App() {
   const fetchApplications = async () => {
     try {
       const endpoint = user?.role === 'employer' ? '/applications/employer' : '/applications/jobseeker';
-      const res = await axios.get(`${API_BASE}${endpoint}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.get(`${API_BASE}${endpoint}`, authHeader);
       setApplications(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchMyJobs = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/jobs/mine`, authHeader);
+      setMyJobs(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchPendingJobs = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/jobs/pending`, authHeader);
+      setPendingJobs(res.data);
     } catch (err) {
       console.error(err);
     }
@@ -59,34 +86,55 @@ export default function App() {
     localStorage.clear();
     setUser(null);
     setToken('');
+    setMyJobs([]);
+    setPendingJobs([]);
+    setApplications([]);
     setTab('jobs');
   };
 
   const handlePostJob = async (jobData) => {
     try {
-      await axios.post(`${API_BASE}/jobs`, jobData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      alert('Job Posted Successfully!');
+      const res = await axios.post(`${API_BASE}/jobs`, jobData, authHeader);
+
+      // NEW: tell the employer whether the job went live or is waiting for review
+      if (res.data.status === 'Pending') {
+        alert('Job submitted! It was flagged for review and will go live once an admin approves it.');
+        setTab('dashboard');
+      } else {
+        alert('Job Posted Successfully!');
+        setTab('jobs');
+      }
+
       fetchJobs();
-      setTab('jobs');
+      fetchMyJobs();
     } catch (err) {
-      alert('Failed to post job');
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to post job';
+      alert(errorMsg);
     }
   };
 
-  // NEW: delete a job (backend checks that you own it)
   const handleDeleteJob = async (jobId) => {
     try {
-      await axios.delete(`${API_BASE}/jobs/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.delete(`${API_BASE}/jobs/${jobId}`, authHeader);
       alert('Job deleted successfully!');
       fetchJobs();
+      fetchMyJobs();
       fetchApplications();
     } catch (err) {
       const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       alert(`Failed to delete job: ${errorMsg}`);
+    }
+  };
+
+  // NEW: admin approves or rejects a held job
+  const handleReviewJob = async (jobId, decision) => {
+    try {
+      await axios.patch(`${API_BASE}/jobs/${jobId}/review`, { decision }, authHeader);
+      fetchPendingJobs();
+      fetchJobs();
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || err.message;
+      alert(`Failed to review job: ${errorMsg}`);
     }
   };
 
@@ -100,7 +148,7 @@ export default function App() {
 
     try {
       await axios.post(`${API_BASE}/applications`, formData, {
-        headers: { 
+        headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
         }
@@ -116,9 +164,7 @@ export default function App() {
 
   const handleStatusChange = async (appId, status) => {
     try {
-      await axios.patch(`${API_BASE}/applications/${appId}/status`, { status }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.patch(`${API_BASE}/applications/${appId}/status`, { status }, authHeader);
       fetchApplications();
     } catch (err) {
       alert('Failed to update status');
@@ -149,7 +195,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
       <Navbar user={user} setTab={setTab} handleLogout={handleLogout} />
-      
+
       <div className="max-w-6xl mx-auto px-4 py-8">
         {tab === 'login' && <Login handleAuth={handleAuth} />}
         {tab === 'register' && <Register handleAuth={handleAuth} />}
@@ -162,12 +208,15 @@ export default function App() {
           />
         )}
         {tab === 'dashboard' && user && (
-          <Dashboard 
-            user={user} 
-            applications={applications} 
-            handlePostJob={handlePostJob} 
-            handleStatusChange={handleStatusChange} 
+          <Dashboard
+            user={user}
+            applications={applications}
+            myJobs={myJobs}
+            pendingJobs={pendingJobs}
+            handlePostJob={handlePostJob}
+            handleStatusChange={handleStatusChange}
             handleDownloadResume={handleDownloadResume}
+            handleReviewJob={handleReviewJob}
           />
         )}
       </div>
